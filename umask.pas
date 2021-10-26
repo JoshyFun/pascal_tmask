@@ -20,6 +20,13 @@ unit umask;
     TMaskDelphiUTF8=class(TMaskUTF8)
   As sample of initialization.
 
+  ---
+
+  Fixed a bug when OpcodeRanges is enabled but OptionalChar is NOT, the char
+  will be always added as an OptionalChar. Now a InvalidCharMask exception is raised.
+
+  Made TMaskOpCode, TMaskOpcodesEnum and TMaskOpcodesSet class public.
+
 *)
 
 {$mode objfpc}{$H+}
@@ -64,8 +71,7 @@ type
   TMaskBase = class
   private
     procedure SetMaskEscapeChar(AValue: Char);
-  protected
-
+  public
     type
       // Literal = It must match
       // Range = Match any char in the range
@@ -96,7 +102,8 @@ type
                         eMaskOpcodeNegateGroup,
                         eMaskOpcodeEscapeChar);
       TMaskOpcodesSet=set of TMaskOpcodesEnum;
-
+  protected
+    type
       TMaskFailCause = (
         Success = 0,
         MatchStringExhausted = 1,
@@ -1167,9 +1174,13 @@ begin
                         Exception_IncompleteMask();
                       end;
                     end;
-                    Add(TMaskOpCode.OptionalChar);
-                    Add(1,@lMask[j]);
-                    lLast:=TMaskOpCode.OptionalChar;
+                    if eMaskOpcodeOptionalChar in FMaskOpcodesAllowed then begin
+                      Add(TMaskOpCode.OptionalChar);
+                      Add(1,@lMask[j]);
+                      lLast:=TMaskOpCode.OptionalChar;
+                    end else begin
+                      Exception_InvalidCharMask(lMask[j],j);
+                    end;
                   end;
                   inc(j);
                 end;
@@ -1627,7 +1638,7 @@ begin
                     break;
                   end else begin
                     if (lMask[j]=FMaskEscapeChar) and (eMaskOpcodeEscapeChar in FMaskOpcodesAllowed) then begin
-                      // next is optional char in set
+                      // next is optional char in set or literal
                       inc(j,lCPLength);
                       if j<=cMaskLimit then begin
                         lCPLength:=UTF8Length(@lMask[j]);
@@ -1635,9 +1646,13 @@ begin
                         Exception_IncompleteMask();
                       end;
                     end;
-                    Add(TMaskOpCode.OptionalChar);
-                    Add(lCPLength,@lMask[j]);
-                    lLast:=TMaskOpCode.OptionalChar;
+                    if eMaskOpcodeOptionalChar in FMaskOpcodesAllowed then begin
+                      Add(TMaskOpCode.OptionalChar);
+                      Add(lCPLength,@lMask[j]);
+                      lLast:=TMaskOpCode.OptionalChar;
+                    end else begin
+                      Exception_InvalidCharMask(lMask[j],j);
+                    end;
                   end;
                   inc(j,lCPLength);
                 end;
@@ -2167,9 +2182,13 @@ begin
                         Exception_IncompleteMask();
                       end;
                     end;
-                    Add(TMaskOpCode.OptionalChar);
-                    Add(lCPLength*UTF16_CP_BYTES,@lMask[j]);
-                    lLast:=TMaskOpCode.OptionalChar;
+                    if eMaskOpcodeOptionalChar in FMaskOpcodesAllowed then begin
+                      Add(TMaskOpCode.OptionalChar);
+                      Add(lCPLength*UTF16_CP_BYTES,@lMask[j]);
+                      lLast:=TMaskOpCode.OptionalChar;
+                    end else begin
+                      Exception_InvalidCharMask(lMask[j],j);
+                    end;
                   end;
                   inc(j,lCPLength);
                 end;
