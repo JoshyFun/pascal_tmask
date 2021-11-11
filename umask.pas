@@ -1212,13 +1212,6 @@ begin
                   Exception_MissingCloseChar(']',cMaskLimit);
                 end;
               end else begin
-                if (lMask[j]=FMaskEscapeChar) and (eMaskOpcodeEscapeChar in FMaskOpcodesAllowed) then begin
-                  // next is Literal
-                  inc(j);
-                  if j>cMaskLimit then begin
-                    Exception_IncompleteMask();
-                  end;
-                end;
                 Add(TMaskOpCode.Literal);
                 Add(1,@lMask[j]);
                 inc(cMatchMinimumLiteralBytes);
@@ -1684,15 +1677,6 @@ begin
                   Exception_MissingCloseChar(']',cMaskLimit);
                 end;
               end else begin
-                if (lMask[j]=FMaskEscapeChar) and (eMaskOpcodeEscapeChar in FMaskOpcodesAllowed) then begin
-                  // next is Literal
-                  inc(j,lCPLength);
-                  if j<=cMaskLimit then begin
-                    lCPLength:=UTF8Length(@lMask[j]);
-                  end else begin
-                    Exception_IncompleteMask();
-                  end;
-                end;
                 Add(TMaskOpCode.Literal);
                 Add(lCPLength,@lMask[j]);
                 inc(cMatchMinimumLiteralBytes,lCPLength);
@@ -2220,15 +2204,6 @@ begin
                   Exception_MissingCloseChar(']',cMaskLimit);
                 end;
               end else begin
-                if (lMask[j]=FMaskEscapeChar) and (eMaskOpcodeEscapeChar in FMaskOpcodesAllowed) then begin
-                  // next is Literal
-                  inc(j,lCPLength);
-                  if j<=cMaskLimit then begin
-                    lCPLength:=UTF16Length(@lMask[j]);
-                  end else begin
-                    Exception_IncompleteMask();
-                  end;
-                end;
                 Add(TMaskOpCode.Literal);
                 Add(lCPLength*UTF16_CP_BYTES,@lMask[j]);
                 inc(cMatchMinimumLiteralBytes,lCPLength);
