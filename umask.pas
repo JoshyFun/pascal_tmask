@@ -103,6 +103,7 @@ type
                         eMaskOpcodeEscapeChar);
       TMaskOpcodesSet=set of TMaskOpcodesEnum;
   protected
+    const GROW_BY=100;
     type
       TMaskFailCause = (
         Success = 0,
@@ -143,29 +144,31 @@ type
         --eWindowsQuirk_NoExtension
           Anything*.      = Matches "Anything*" without extension
       *)
+  public
+    type
       TWindowsQuirks=(eWindowsQuirk_AnyExtension,eWindowsQuirk_FilenameEnd,eWindowsQuirk_Extension3More,eWindowsQuirk_EmptyIsAny,eWindowsQuirk_AllByExtension,eWindowsQuirk_NoExtension);
       TWindowsQuirkSet=set of TWindowsQuirks;
-    const GROW_BY=100;
-          TWindowsQuirksAllAllowed=[eWindowsQuirk_AnyExtension,
+    const
+      TWindowsQuirksAllAllowed=[eWindowsQuirk_AnyExtension,
+                                eWindowsQuirk_FilenameEnd,
+                                eWindowsQuirk_Extension3More,
+                                eWindowsQuirk_EmptyIsAny,
+                                eWindowsQuirk_AllByExtension,
+                                eWindowsQuirk_NoExtension];
+      TWindowsQuirksDefaultAllowed=[eWindowsQuirk_AnyExtension,
                                     eWindowsQuirk_FilenameEnd,
                                     eWindowsQuirk_Extension3More,
                                     eWindowsQuirk_EmptyIsAny,
-                                    eWindowsQuirk_AllByExtension,
+                                    {eWindowsQuirk_AllByExtension,} // Not in use anymore
                                     eWindowsQuirk_NoExtension];
-          TWindowsQuirksDefaultAllowed=[eWindowsQuirk_AnyExtension,
-                                        eWindowsQuirk_FilenameEnd,
-                                        eWindowsQuirk_Extension3More,
-                                        eWindowsQuirk_EmptyIsAny,
-                                        {eWindowsQuirk_AllByExtension,} // Not in use anymore
-                                        eWindowsQuirk_NoExtension];
-          TMaskOpCodesAllAllowed=[eMaskOpcodeAnyChar,
-                                  eMaskOpcodeAnyCharOrNone,
-                                  eMaskOpcodeAnyText,
-                                  eMaskOpcodeRange,
-                                  eMaskOpcodeOptionalChar,
-                                  eMaskOpcodeNegateGroup,
-                                  eMaskOpcodeEscapeChar];
-          TMaskOpCodesDefaultAllowed=TMaskOpCodesAllAllowed;
+      TMaskOpCodesAllAllowed=[eMaskOpcodeAnyChar,
+                              eMaskOpcodeAnyCharOrNone,
+                              eMaskOpcodeAnyText,
+                              eMaskOpcodeRange,
+                              eMaskOpcodeOptionalChar,
+                              eMaskOpcodeNegateGroup,
+                              eMaskOpcodeEscapeChar];
+      TMaskOpCodesDefaultAllowed=TMaskOpCodesAllAllowed;
   protected
     procedure Add(const aLength: integer; const aData: PBYTE);
     procedure Add(const aValue: integer);{$IFDEF USE_INLINE}inline;{$ENDIF}
@@ -421,7 +424,7 @@ procedure TMaskUnicodeWindows.Compile;
 
   function RightStr(const aStr: UnicodeString; const aCounter: integer): UnicodeString;
   begin
-    Result:=copy(aStr,Length(aStr)-aCounter,aCounter);
+    Result:=copy(aStr,Length(aStr)-aCounter+1,aCounter);
   end;
 
   function StringOfUnicodeChar(const aUnicodeString: UnicodeString; const aCounter: integer): UnicodeString;
@@ -482,7 +485,7 @@ begin
 
   // Quirk "blah.*" = "blah*"
   if eWindowsQuirk_AnyExtension in FMaskWindowsQuirkAllowed then begin
-    if RightStr(lModifiedMask,3)='*.*' then begin
+    if (RightStr(lModifiedMask,2)='.*') and (Length(lModifiedMask)>2) then begin
       lModifiedMask:=copy(lModifiedMask,1,Length(lModifiedMask)-2);
       cMaskWindowsQuirkInUse:=cMaskWindowsQuirkInUse+[eWindowsQuirk_AnyExtension];
     end;
@@ -540,10 +543,17 @@ function TMaskUnicodeWindows.Matches(const aFileName: UnicodeString): Boolean;
 var
   lFileName, lExtension: UnicodeString;
 begin
+  if not cMaskIsCompiled then Compile;
   if eWindowsQuirk_NoExtension in cMaskWindowsQuirkInUse then begin
     SplitFileNameExtension(aFileName,lFileName,lExtension,false);
     // eWindowsQuirk_NoExtension = Empty extension
-    if lExtension<>'' then exit(false);
+    // Its not clear if a file "file." should match an "*." mask because
+    // there is no way in Windows that a file ends with a dot.
+    if (lExtension<>'') and (lExtension<>'.') then exit(false);
+  end else if eWindowsQuirk_AnyExtension in cMaskWindowsQuirkInUse then begin
+    SplitFileNameExtension(aFileName,lFileName,lExtension,false);
+    Result:=inherited Matches(lFileName);
+    exit;
   end;
   Result:=inherited Matches(aFileName);
 end;
@@ -638,7 +648,7 @@ begin
 
   // Quirk "blah.*" = "blah*"
   if eWindowsQuirk_AnyExtension in FMaskWindowsQuirkAllowed then begin
-    if RightStr(lModifiedMask,3)='*.*' then begin
+    if (RightStr(lModifiedMask,2)='.*') and (Length(lModifiedMask)>2) then begin
       lModifiedMask:=copy(lModifiedMask,1,Length(lModifiedMask)-2);
       cMaskWindowsQuirkInUse:=cMaskWindowsQuirkInUse+[eWindowsQuirk_AnyExtension];
     end;
@@ -683,7 +693,7 @@ begin
 
   if eWindowsQuirk_NoExtension in FMaskWindowsQuirkAllowed then begin
     if Length(lExtensionMask)=1 then begin
-      cMaskWindowsQuirkInUse:=[eWindowsQuirk_NoExtension];
+      cMaskWindowsQuirkInUse:=cMaskWindowsQuirkInUse+[eWindowsQuirk_NoExtension];
       lExtensionMask:='';
     end;
   end;
@@ -697,10 +707,17 @@ var
   lFileName, lExtension: RawByteString;
 
 begin
+  if not cMaskIsCompiled then Compile;
   if eWindowsQuirk_NoExtension in cMaskWindowsQuirkInUse then begin
     SplitFileNameExtension(aFileName,lFileName,lExtension,false);
     // eWindowsQuirk_NoExtension = Empty extension
-    if lExtension<>'' then exit(false);
+    // Its not clear if a file "file." should match an "*." mask because
+    // there is no way in Windows that a file ends with a dot.
+    if (lExtension<>'') and (lExtension<>'.') then exit(false);
+  end else if eWindowsQuirk_AnyExtension in cMaskWindowsQuirkInUse then begin
+    SplitFileNameExtension(aFileName,lFileName,lExtension,false);
+    Result:=inherited Matches(lFileName);
+    exit;
   end;
   Result:=Inherited Matches(aFileName);
 end;
@@ -795,7 +812,7 @@ begin
 
   // Quirk "blah.*" = "blah*"
   if eWindowsQuirk_AnyExtension in FMaskWindowsQuirkAllowed then begin
-    if RightStr(lModifiedMask,3)='*.*' then begin
+    if (RightStr(lModifiedMask,2)='.*') and (Length(lModifiedMask)>2) then begin
       lModifiedMask:=copy(lModifiedMask,1,Length(lModifiedMask)-2);
       cMaskWindowsQuirkInUse:=cMaskWindowsQuirkInUse+[eWindowsQuirk_AnyExtension];
     end;
@@ -854,10 +871,17 @@ var
   lFileName: RawByteString;
   lExtension: RawByteString;
 begin
+  if not cMaskIsCompiled then Compile;
   if eWindowsQuirk_NoExtension in cMaskWindowsQuirkInUse then begin
     SplitFileNameExtension(aFileName,lFileName,lExtension,false);
     // eWindowsQuirk_NoExtension = Empty extension
-    if lExtension<>'' then exit(false);
+    // Its not clear if a file "file." should match an "*." mask because
+    // there is no way in Windows that a file ends with a dot.
+    if (lExtension<>'') and (lExtension<>'.') then exit(false);
+  end else if eWindowsQuirk_AnyExtension in cMaskWindowsQuirkInUse then begin
+    SplitFileNameExtension(aFileName,lFileName,lExtension,false);
+    Result:=inherited Matches(lFileName);
+    exit;
   end;
   Result:=inherited Matches(aFileName);
 end;
